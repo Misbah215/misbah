@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Maze Game</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #222;
+      color: #fff;
+      font-family: Arial, sans-serif;
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    #view {
+      position: relative;
+      text-align: center;
+    }
+    #mazeCanvas {
+      display: block;
+      background-color: #333;
+      border: 5px solid #444;
+    }
+    #Message-Container {
+      visibility: hidden;
+      position: absolute;
+      top: 30%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 20px;
+      border-radius: 10px;
+      text-align: center;
+    }
+    #moves {
+      font-size: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Maze Game</h1>
+  <div id="view">
+    <canvas id="mazeCanvas"></canvas>
+    <div id="Message-Container">
+      <p id="moves"></p>
+      <button onclick="toggleVisibility('Message-Container'); makeMaze();">Play Again</button>
+    </div>
+  </div>
+  <select id="diffSelect" onchange="makeMaze()">
+    <option value="10">Easy</option>
+    <option value="15" selected>Medium</option>
+    <option value="25">Hard</option>
+  </select>
+
+  <script>
+    function rand(max) {
+      return Math.floor(Math.random() * max);
+    }
+
+    function shuffle(a) {
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    function displayVictoryMessage(moves) {
+      document.getElementById("moves").innerText = "You Moved " + moves + " Steps.";
+      toggleVisibility("Message-Container");
+    }
+
+    function toggleVisibility(id) {
+      const elem = document.getElementById(id);
+      elem.style.visibility = elem.style.visibility === "visible" ? "hidden" : "visible";
+    }
+
+    class Maze {
+      constructor(width, height) {
+        this.width = width;
+        this.height = height;
+        this.dirs = ["n", "s", "e", "w"];
+        this.modDir = {
+          n: { y: -1, x: 0, o: "s" },
+          s: { y: 1, x: 0, o: "n" },
+          e: { y: 0, x: 1, o: "w" },
+          w: { y: 0, x: -1, o: "e" }
+        };
+        this.startCoord = null;
+        this.endCoord = null;
+        this.mazeMap = [];
+        this.generate();
+      }
+
+      generate() {
+        this.initMap();
+        this.defineStartEnd();
+        this.carveMaze();
+      }
+
+      initMap() {
+        this.mazeMap = Array.from({ length: this.height }, () =>
+          Array.from({ length: this.width }, () => ({
+            n: false, s: false, e: false, w: false, visited: false, priorPos: null
+          }))
+        );
+      }
+
+      defineStartEnd() {
+        this.startCoord = { x: 0, y: 0 };
+        this.endCoord = { x: this.width - 1, y: this.height - 1 };
+      }
+
+      carveMaze() {
+        let stack = [];
+        let totalCells = this.width * this.height;
+        let visitedCells = 1;
+
+        let pos = { x: 0, y: 0 };
+        this.mazeMap[pos.y][pos.x].visited = true;
+
+        while (visitedCells < totalCells) {
+          let neighbors = this.getUnvisitedNeighbors(pos);
+          if (neighbors.length > 0) {
+            const next = neighbors[rand(neighbors.length)];
+            this.breakWall(pos, next);
+            stack.push(pos);
+            pos = next;
+            this.mazeMap[pos.y][pos.x].visited = true;
+            visitedCells++;
+          } else {
+            pos = stack.pop();
+          }
+        }
+      }
+
+      getUnvisitedNeighbors(pos) {
+        return this.dirs
+          .map(dir => ({
+            x: pos.x + this.modDir[dir].x,
+            y: pos.y + this.modDir[dir].y,
+            dir
+          }))
+          .filter(neighbor =>
+            neighbor.x >= 0 && neighbor.y >= 0 &&
+            neighbor.x < this.width && neighbor.y < this.height &&
+            !this.mazeMap[neighbor.y][neighbor.x].visited
+          );
+      }
+
+      breakWall(current, next) {
+        const dir = this.dirs.find(d =>
+          next.x - current.x === this.modDir[d].x &&
+          next.y - current.y === this.modDir[d].y
+        );
+        this.mazeMap[current.y][current.x][dir] = true;
+        this.mazeMap[next.y][next.x][this.modDir[dir].o] = true;
+      }
+    }
+
+    class MazeDrawer {
+      constructor(maze, ctx, cellSize) {
+        this.maze = maze;
+        this.ctx = ctx;
+        this.cellSize = cellSize;
+      }
+
+      draw() {
+        const { mazeMap } = this.maze;
+        this.ctx.clearRect(0, 0, this.cellSize * mazeMap[0].length, this.cellSize * mazeMap.length);
+        this.ctx.lineWidth = 2;
+
+        for (let y = 0; y < mazeMap.length; y++) {
+          for (let x = 0; x < mazeMap[y].length; x++) {
+            const cell = mazeMap[y][x];
+            const px = x * this.cellSize;
+            const py = y * this.cellSize;
+
+            if (!cell.n) this.drawLine(px, py, px + this.cellSize, py);
+            if (!cell.s) this.drawLine(px, py + this.cellSize, px + this.cellSize, py + this.cellSize);
+            if (!cell.e) this.drawLine(px + this.cellSize, py, px + this.cellSize, py + this.cellSize);
+            if (!cell.w) this.drawLine(px, py, px, py + this.cellSize);
+          }
+        }
+        this.drawEndFlag();
+      }
+
+      drawLine(x1, y1, x2, y2) {
+        this.ctx.beginPath();
+        this.ctx.moveTo(x1, y1);
+        this.ctx.lineTo(x2, y2);
+        this.ctx.stroke();
+      }
+
+      drawEndFlag() {
+        const { endCoord } = this.maze;
+        const size = this.cellSize / 3;
+        const x = endCoord.x * this.cellSize + this.cellSize / 2 - size / 2;
+        const y = endCoord.y * this.cellSize + this.cellSize / 2 - size / 2;
+
+        this.ctx.fillStyle = "red";
+        this.ctx.fillRect(x, y, size, size);
+      }
+    }
+
+    class Player {
+      constructor(maze, ctx, cellSize, onComplete) {
+        this.maze = maze;
+        this.ctx = ctx;
+        this.cellSize = cellSize;
+        this.onComplete = onComplete;
+        this.moves = 0;
+        this.coord = { ...maze.startCoord };
+        this.drawPlayer();
+        window.addEventListener("keydown", this.handleKey.bind(this));
+      }
+
+      drawPlayer() {
+        this.ctx.fillStyle = "yellow";
+        this.ctx.beginPath();
+        this.ctx.arc(
+          this.coord.x * this.cellSize + this.cellSize / 2,
+          this.coord.y * this.cellSize + this.cellSize / 2,
+          this.cellSize / 3, 0, Math.PI * 2
+        );
+        this.ctx.fill();
+      }
+
+      handleKey(e) {
+        const moves = { 37: "w", 38: "n", 39: "e", 40: "s" };
+        const move = moves[e.keyCode];
+        if (!move) return;
+
+        const next = {
+          x: this.coord.x + this.maze.modDir[move].x,
+          y: this.coord.y + this.maze.modDir[move].y
+        };
+
+        if (this.maze.mazeMap[this.coord.y][this.coord.x][move]) {
+          this.ctx.clearRect(
+            this.coord.x * this.cellSize,
+            this.coord.y * this.cellSize,
+            this.cellSize, this.cellSize
+          );
+          this.coord = next;
+          this.moves++;
+          this.drawPlayer();
+
+          if (this.coord.x === this.maze.endCoord.x && this.coord.y === this.maze.endCoord.y) {
+            this.onComplete(this.moves);
+          }
+        }
+      }
+    }
+
+    const canvas = document.getElementById("mazeCanvas");
+    const ctx = canvas.getContext("2d");
+
+    function makeMaze() {
+      const difficulty = +document.getElementById("diffSelect").value;
+      canvas.width = canvas.height = 500;
+      const cellSize = canvas.width / difficulty;
+
+      const maze = new Maze(difficulty, difficulty);
+      const drawer = new MazeDrawer(maze, ctx, cellSize);
+      drawer.draw();
+
+      new Player(maze, ctx, cellSize, displayVictoryMessage);
+    }
+
+    window.onload = makeMaze;
+  </script>
+</body>
+</html>
